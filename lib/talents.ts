@@ -6,6 +6,22 @@ import type {
 
 export type TalentEntry = {
   id: string;
+
+  /*
+   * Nanokaの天賦項目を安定して識別するための情報。
+   *
+   * 現在のNanokaレスポンスには
+   * charged_damage_3 / damage_3 のような
+   * 内部キーが直接含まれていないため、
+   * param番号を sourceKey として保持する。
+   *
+   * 例:
+   * {param6:F1P} → sourceKey = "param6"
+   */
+  sourceKey: string | null;
+  descIndex: number;
+  paramNumber: number | null;
+
   label: string;
   paramIndex: number | null;
   value: number | null;
@@ -105,11 +121,17 @@ export function getTalentEntries(
           return {
             id:
               `${skillIndex}-${talentLevel}-${index}`,
+
+            sourceKey: null,
+            descIndex: index,
+            paramNumber: null,
+
             label,
             paramIndex: null,
             value: null,
             format: null,
             isPercent: false,
+
             hitCount:
               getHitCount(
                 label
@@ -117,6 +139,13 @@ export function getTalentEntries(
           };
         }
 
+        /*
+         * 例:
+         * {param6:F1P}
+         *
+         * match[1] = 6
+         * match[2] = F1P
+         */
         const match =
           expressionPart.match(
             /\{param(\d+)(?::([^}]+))?\}/
@@ -126,11 +155,17 @@ export function getTalentEntries(
           return {
             id:
               `${skillIndex}-${talentLevel}-${index}`,
+
+            sourceKey: null,
+            descIndex: index,
+            paramNumber: null,
+
             label,
             paramIndex: null,
             value: null,
             format: null,
             isPercent: false,
+
             hitCount:
               getHitCount(
                 label
@@ -145,6 +180,9 @@ export function getTalentEntries(
 
         const paramIndex =
           paramNumber - 1;
+
+        const sourceKey =
+          `param${paramNumber}`;
 
         const format =
           match[2] ??
@@ -165,11 +203,17 @@ export function getTalentEntries(
         return {
           id:
             `${skillIndex}-${talentLevel}-${index}`,
+
+          sourceKey,
+          descIndex: index,
+          paramNumber,
+
           label,
           paramIndex,
           value,
           format,
           isPercent,
+
           hitCount:
             getHitCount(
               label

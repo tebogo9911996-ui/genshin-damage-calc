@@ -2,6 +2,11 @@ import {
   getCritMultiplier,
 } from "./damage";
 
+import {
+  REACTION_DATA,
+  getReactionLevelMultiplierFromData,
+} from "./reactionData";
+
 /*
  * ==================================================
  * 元素反応の種類
@@ -32,35 +37,12 @@ export type AdditiveReaction =
 /*
  * ==================================================
  * Lvごとの反応基礎値
- *
- * 現在よく使うLvを正式値で登録。
- * それ以外のLvは後でNanoka/GameDataから
- * 完全なLv1～100表を入れられる構造。
  * ==================================================
- */
-
-const REACTION_LEVEL_MULTIPLIER:
-Record<number, number> = {
-  1: 17.165605,
-  10: 34.143343,
-  20: 80.584775,
-  30: 136.29291,
-  40: 207.382042,
-  50: 323.601597,
-  60: 492.88489,
-  70: 765.640231,
-  80: 1077.443668,
-  90: 1446.853458,
-  95: 1561.47,
-  100: 1674.81,
-};
-
-/*
- * 登録Lv以外の場合は
- * 前後の登録値から線形補間。
  *
- * 後で完全なLvテーブルへ差し替え可能。
+ * 以前は reactions.ts 内に一部Lvだけ直書きしていたが、
+ * 今後は reactionData.ts を唯一のデータ元として使う。
  */
+
 export function getReactionLevelMultiplier(
   level: number
 ) {
@@ -74,17 +56,28 @@ export function getReactionLevelMultiplier(
     );
 
   const exact =
-    REACTION_LEVEL_MULTIPLIER[
+    getReactionLevelMultiplierFromData(
       safeLevel
-    ];
+    );
 
-  if (exact !== undefined) {
+  if (exact !== null) {
     return exact;
   }
 
+  /*
+   * reactionData.ts は基本的にLv1～90を
+   * 1刻みで持つ。
+   *
+   * 91～94 / 96～99など未登録Lvは、
+   * 登録済みの前後Lvから線形補間する。
+   */
+  const table =
+    REACTION_DATA
+      .characterLevelMultipliers;
+
   const levels =
     Object.keys(
-      REACTION_LEVEL_MULTIPLIER
+      table
     )
       .map(Number)
       .sort(
@@ -123,14 +116,25 @@ export function getReactionLevelMultiplier(
   }
 
   const lowerValue =
-    REACTION_LEVEL_MULTIPLIER[
-      lower
+    table[
+      String(
+        lower
+      ) as keyof typeof table
     ];
 
   const upperValue =
-    REACTION_LEVEL_MULTIPLIER[
-      upper
+    table[
+      String(
+        upper
+      ) as keyof typeof table
     ];
+
+  if (
+    lower ===
+    upper
+  ) {
+    return lowerValue;
+  }
 
   const ratio =
     (
@@ -234,7 +238,9 @@ export function getAdditiveEmBonus(
 /*
  * 星反応 / 月反応系
  *
- * 現在の星反応コードで使用
+ * 現在の星反応コードで使用。
+ * 月反応の専用式もこの補正を使う場合は、
+ * 後で dedicatedReactions 側から参照する。
  */
 export function getStarReactionEmBonus(
   elementalMastery: number
@@ -261,15 +267,6 @@ export function getStarReactionEmBonus(
  * ==================================================
  */
 
-/*
- * 基礎倍率
- *
- * 炎 → 水   蒸発 = 1.5
- * 水 → 炎   蒸発 = 2.0
- *
- * 炎 → 氷   溶解 = 2.0
- * 氷 → 炎   溶解 = 1.5
- */
 export function getAmplifyingBaseMultiplier(
   reaction: AmplifyingReaction
 ) {
@@ -277,29 +274,34 @@ export function getAmplifyingBaseMultiplier(
     reaction
   ) {
     case "vaporize_pyro":
-      return 1.5;
+      return REACTION_DATA
+        .options
+        .vaporize15
+        .coefficient;
 
     case "vaporize_hydro":
-      return 2.0;
+      return REACTION_DATA
+        .options
+        .vaporize20
+        .coefficient;
 
     case "melt_pyro":
-      return 2.0;
+      return REACTION_DATA
+        .options
+        .melt20
+        .coefficient;
 
     case "melt_cryo":
-      return 1.5;
+      return REACTION_DATA
+        .options
+        .melt15
+        .coefficient;
 
     default:
       return 1;
   }
 }
 
-/*
- * 最終蒸発・溶解倍率
- *
- * 基礎倍率
- * ×
- * (1 + 熟知補正 + 反応バフ)
- */
 export function getAmplifyingReactionMultiplier(
   reactionBaseMultiplier: number,
   elementalMastery: number,
@@ -339,10 +341,6 @@ export function getAmplifyingMultiplierByReaction({
   );
 }
 
-/*
- * 通常ダメージへ
- * 蒸発・溶解を掛けるだけ
- */
 export function applyAmplifyingReaction({
   damage,
   reaction,
@@ -380,49 +378,64 @@ export function getTransformativeReactionCoefficient(
     reaction
   ) {
     case "burning":
-      return 0.25;
+      return REACTION_DATA
+        .options
+        .burning
+        .coefficient;
 
     case "superconduct":
-      return 1.5;
+      return REACTION_DATA
+        .options
+        .superconduct
+        .coefficient;
 
     case "swirl":
-      return 0.6;
+      return REACTION_DATA
+        .options
+        .swirl
+        .coefficient;
 
     case "electro_charged":
-      return 2.0;
+      return REACTION_DATA
+        .options
+        .electroCharged
+        .coefficient;
 
     case "shatter":
-      return 3.0;
+      return REACTION_DATA
+        .options
+        .shatter
+        .coefficient;
 
     case "overloaded":
-      return 2.75;
+      return REACTION_DATA
+        .options
+        .overload
+        .coefficient;
 
     case "bloom":
-      return 2.0;
+      return REACTION_DATA
+        .options
+        .bloom
+        .coefficient;
 
     case "hyperbloom":
-      return 3.0;
+      return REACTION_DATA
+        .options
+        .hyperbloom
+        .coefficient;
 
     case "burgeon":
-      return 3.0;
+      return REACTION_DATA
+        .options
+        .burgeon
+        .coefficient;
 
     default:
       return 0;
   }
 }
 
-/*
- * 劇変反応ダメージ
- *
- * Lv基礎値
- * × 反応係数
- * × (1 + 熟知補正 + 反応バフ)
- * × 耐性補正
- *
- * 防御補正なし
- * 通常ダメバフなし
- * 原則会心なし
- */
 export function calculateTransformativeReactionDamage({
   reaction,
   characterLevel,
@@ -488,24 +501,22 @@ export function getAdditiveReactionCoefficient(
     reaction
   ) {
     case "aggravate":
-      return 1.15;
+      return REACTION_DATA
+        .options
+        .aggravate
+        .coefficient;
 
     case "spread":
-      return 1.25;
+      return REACTION_DATA
+        .options
+        .spread
+        .coefficient;
 
     default:
       return 0;
   }
 }
 
-/*
- * 激化による「実数ダメージ加算値」
- *
- * この値自体が最終ダメージではない。
- *
- * 元攻撃の基礎ダメージに加算してから
- * ダメバフ・会心・防御・耐性を掛ける。
- */
 export function calculateAdditiveReactionBonus({
   reaction,
   characterLevel,
@@ -544,13 +555,6 @@ export function calculateAdditiveReactionBonus({
   );
 }
 
-/*
- * 激化込み最終ダメージ
- *
- * baseDamage
- * =
- * 攻撃力×天賦倍率など
- */
 export function calculateAdditiveReactionDamage({
   baseDamage,
   additiveReactionBonus,
@@ -588,6 +592,9 @@ export function calculateAdditiveReactionDamage({
  * ==================================================
  * 星反応
  * ==================================================
+ *
+ * ここは現行UIとの互換用。
+ * 反応種別の判定は reactionEngine.ts が担当する。
  */
 
 export function calculateStarReactionDamage({

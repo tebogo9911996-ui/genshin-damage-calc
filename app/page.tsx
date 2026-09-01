@@ -46,12 +46,25 @@ import {
 } from "@/lib/reactions";
 
 import {
+  calculateLunarDirectDamage,
+} from "@/lib/dedicatedReactions";
+
+import {
+  resolveDedicatedReaction,
+} from "@/lib/reactionResolver";
+
+import {
   getTalentEntries,
 } from "@/lib/talents";
 
 import {
   getSpecialEffects,
 } from "@/lib/specialRules";
+
+import {
+  calculateSpecialDamage,
+  extractSpecialDamageEntries,
+} from "@/lib/specialDamageEngine";
 
 import {
   ARTIFACT_SETS,
@@ -352,6 +365,7 @@ type DamageRowData = {
   crit: number;
   nonCrit: number;
   reaction?: boolean;
+  reactionSource?: "native" | "manual";
   baselineExpected?: number;
   baselineCrit?: number;
   baselineNonCrit?: number;
@@ -385,6 +399,19 @@ type ReactionButtonData = {
     | "transformative";
   displayValue?: string;
 };
+
+
+type DamageTab =
+  | "normal"
+  | "skill"
+  | "burst"
+  | "reaction"
+  | "other";
+
+type NormalDamageSubTab =
+  | "normal"
+  | "charged"
+  | "plunge";
 
 /* =========================
  * Main
@@ -527,6 +554,21 @@ export default function Home() {
     setBaselineDamageGroups,
   ] = useState<DamageGroup[] | null>(
     null
+  );
+
+
+  const [
+    activeDamageTab,
+    setActiveDamageTab,
+  ] = useState<DamageTab>(
+    "normal"
+  );
+
+  const [
+    activeNormalDamageSubTab,
+    setActiveNormalDamageSubTab,
+  ] = useState<NormalDamageSubTab>(
+    "normal"
   );
 
   /* 状態 */
@@ -725,6 +767,26 @@ export default function Home() {
   const [
     addReactionDamage,
     setAddReactionDamage,
+  ] = useState(0);
+
+  const [
+    addLunarReactionDamage,
+    setAddLunarReactionDamage,
+  ] = useState(0);
+
+  const [
+    addLunarChargedDamage,
+    setAddLunarChargedDamage,
+  ] = useState(0);
+
+  const [
+    addLunarBloomDamage,
+    setAddLunarBloomDamage,
+  ] = useState(0);
+
+  const [
+    addLunarCrystallizeDamage,
+    setAddLunarCrystallizeDamage,
   ] = useState(0);
 
   /*
@@ -1001,6 +1063,31 @@ export default function Home() {
       artifactNoblesseBuffActive,
       artifactMarechausseeStacks,
     ]);
+
+  function getEngineNumericBonus(
+    result:
+      | NonNullable<
+          typeof artifactBuffResult
+        >
+      | null,
+    key: string
+  ) {
+    if (!result) {
+      return 0;
+    }
+
+    const record =
+      result as unknown as
+        Record<string, unknown>;
+
+    const value =
+      record[key];
+
+    return typeof value ===
+      "number"
+      ? value
+      : 0;
+  }
 
   function getEngineElementBonus(
     result:
@@ -1676,6 +1763,40 @@ export default function Home() {
         ) *
           100;
 
+
+      const lunarReactionDamageNoBuff =
+        artifactBaseEffects
+          .lunarReactionBonus +
+        getEngineNumericBonus(
+          artifactBaseBuffResult,
+          "lunarReactionBonus"
+        ) *
+          100;
+
+      const lunarChargedDamageNoBuff =
+        lunarReactionDamageNoBuff +
+        getEngineNumericBonus(
+          artifactBaseBuffResult,
+          "lunarChargedBonus"
+        ) *
+          100;
+
+      const lunarBloomDamageNoBuff =
+        lunarReactionDamageNoBuff +
+        getEngineNumericBonus(
+          artifactBaseBuffResult,
+          "lunarBloomBonus"
+        ) *
+          100;
+
+      const lunarCrystallizeDamageNoBuff =
+        lunarReactionDamageNoBuff +
+        getEngineNumericBonus(
+          artifactBaseBuffResult,
+          "lunarCrystallizeBonus"
+        ) *
+          100;
+
       /*
        * バフあり
        *
@@ -1869,6 +1990,40 @@ export default function Home() {
         effects.reactionBonus *
           100;
 
+
+      const lunarReactionDamageBuffed =
+        artifactEffects
+          .lunarReactionBonus +
+        getEngineNumericBonus(
+          artifactBuffResult,
+          "lunarReactionBonus"
+        ) *
+          100;
+
+      const lunarChargedDamageBuffed =
+        lunarReactionDamageBuffed +
+        getEngineNumericBonus(
+          artifactBuffResult,
+          "lunarChargedBonus"
+        ) *
+          100;
+
+      const lunarBloomDamageBuffed =
+        lunarReactionDamageBuffed +
+        getEngineNumericBonus(
+          artifactBuffResult,
+          "lunarBloomBonus"
+        ) *
+          100;
+
+      const lunarCrystallizeDamageBuffed =
+        lunarReactionDamageBuffed +
+        getEngineNumericBonus(
+          artifactBuffResult,
+          "lunarCrystallizeBonus"
+        ) *
+          100;
+
       /*
        * 追加バフ込みの最終値
        *
@@ -1943,6 +2098,26 @@ export default function Home() {
         reactionDamageBuffed +
         addReactionDamage;
 
+
+      const lunarReactionDamageFinal =
+        lunarReactionDamageBuffed +
+        addLunarReactionDamage;
+
+      const lunarChargedDamageFinal =
+        lunarChargedDamageBuffed +
+        addLunarReactionDamage +
+        addLunarChargedDamage;
+
+      const lunarBloomDamageFinal =
+        lunarBloomDamageBuffed +
+        addLunarReactionDamage +
+        addLunarBloomDamage;
+
+      const lunarCrystallizeDamageFinal =
+        lunarCrystallizeDamageBuffed +
+        addLunarReactionDamage +
+        addLunarCrystallizeDamage;
+
       return {
         characterBaseAtk,
         characterBaseHp,
@@ -1964,6 +2139,10 @@ export default function Home() {
         skillDamageNoBuff,
         burstDamageNoBuff,
         reactionDamageNoBuff,
+        lunarReactionDamageNoBuff,
+        lunarChargedDamageNoBuff,
+        lunarBloomDamageNoBuff,
+        lunarCrystallizeDamageNoBuff,
 
         hpBuffed,
         atkBuffed,
@@ -1979,6 +2158,10 @@ export default function Home() {
         skillDamageBuffed,
         burstDamageBuffed,
         reactionDamageBuffed,
+        lunarReactionDamageBuffed,
+        lunarChargedDamageBuffed,
+        lunarBloomDamageBuffed,
+        lunarCrystallizeDamageBuffed,
 
         hpFinal,
         atkFinal,
@@ -1994,6 +2177,10 @@ export default function Home() {
         skillDamageFinal,
         burstDamageFinal,
         reactionDamageFinal,
+        lunarReactionDamageFinal,
+        lunarChargedDamageFinal,
+        lunarBloomDamageFinal,
+        lunarCrystallizeDamageFinal,
 
         effects,
       };
@@ -2037,6 +2224,10 @@ export default function Home() {
       addBurstDamage,
 
       addReactionDamage,
+      addLunarReactionDamage,
+      addLunarChargedDamage,
+      addLunarBloomDamage,
+      addLunarCrystallizeDamage,
     ]);
 
   /* =========================
@@ -2600,6 +2791,257 @@ export default function Home() {
                   effects
                     .talentMultiplierScale;
 
+                const hitCount =
+                  entry.hitCount ??
+                  1;
+
+                /*
+                 * 天賦テキスト自体が「星電導」「星拡散」と
+                 * 明記されている項目は、通常の元素ダメージではなく
+                 * 星反応ダメージとして直接計算する。
+                 *
+                 * 元素ダメージバフ / 通常・重撃・スキル・爆発バフは
+                 * 星反応には入れない。
+                 */
+                const directReactionMatch =
+                  resolveDedicatedReaction({
+                    characterId,
+                    skillIndex,
+                    entry,
+                  });
+
+                if (
+                  directReactionMatch
+                    ?.reactionId ===
+                  "stellarConduct"
+                ) {
+                  const reactionBonus =
+                    stats
+                      .reactionDamageFinal /
+                    100;
+
+                  const starNonCrit =
+                    calculateStarReactionDamage({
+                      attack:
+                        stats.atkFinal,
+
+                      multiplier,
+
+                      reactionCoefficient:
+                        starReactionCoefficient,
+
+                      baseMultiplier:
+                        starBaseMultiplier,
+
+                      reactionBonus,
+
+                      elementalMastery:
+                        stats.emFinal,
+
+                      critDamage: 0,
+
+                      defenseMultiplier:
+                        enemyModifiers
+                          .defenseMultiplier,
+
+                      resistanceMultiplier:
+                        enemyModifiers
+                          .resistanceMultiplier,
+                    }) *
+                    hitCount;
+
+                  const starCrit =
+                    calculateStarReactionDamage({
+                      attack:
+                        stats.atkFinal,
+
+                      multiplier,
+
+                      reactionCoefficient:
+                        starReactionCoefficient,
+
+                      baseMultiplier:
+                        starBaseMultiplier,
+
+                      reactionBonus,
+
+                      elementalMastery:
+                        stats.emFinal,
+
+                      critDamage:
+                        stats
+                          .critDamageFinal,
+
+                      defenseMultiplier:
+                        enemyModifiers
+                          .defenseMultiplier,
+
+                      resistanceMultiplier:
+                        enemyModifiers
+                          .resistanceMultiplier,
+                    }) *
+                    hitCount;
+
+                  const starExpected =
+                    starNonCrit *
+                      (
+                        1 -
+                        critProbability
+                      ) +
+                    starCrit *
+                      critProbability;
+
+                  rows.push({
+                    id:
+                      `${skillIndex}-${entryIndex}-native-star`,
+
+                    label:
+                      entry.label,
+
+                    expected:
+                      starExpected,
+
+                    crit:
+                      starCrit,
+
+                    nonCrit:
+                      starNonCrit,
+
+                    reaction: true,
+                    reactionSource:
+                      "native",
+                  });
+
+                  return;
+                }
+
+                if (
+                  directReactionMatch
+                    ?.reactionId ===
+                    "lunarCharged" ||
+                  directReactionMatch
+                    ?.reactionId ===
+                    "lunarBloom" ||
+                  directReactionMatch
+                    ?.reactionId ===
+                    "lunarCrystallize"
+                ) {
+                  const lunarReactionId =
+                    directReactionMatch
+                      .reactionId;
+
+                  const lunarReactionBonusPercent =
+                    lunarReactionId ===
+                    "lunarCharged"
+                      ? stats
+                          .lunarChargedDamageFinal
+                      : lunarReactionId ===
+                        "lunarBloom"
+                      ? stats
+                          .lunarBloomDamageFinal
+                      : stats
+                          .lunarCrystallizeDamageFinal;
+
+                  const lunarReferenceValue =
+                    directReactionMatch
+                      .referenceStat ===
+                      "hp"
+                      ? stats.hpFinal
+                      : directReactionMatch
+                          .referenceStat ===
+                          "def"
+                      ? stats.defFinal
+                      : directReactionMatch
+                          .referenceStat ===
+                          "em"
+                      ? stats.emFinal
+                      : stats.atkFinal;
+
+                  const lunarNonCrit =
+                    calculateLunarDirectDamage({
+                      reaction:
+                        lunarReactionId,
+
+                      referenceValue:
+                        lunarReferenceValue,
+
+                      multiplier,
+
+                      elementalMastery:
+                        stats.emFinal,
+
+                      lunarReactionBonusPercent,
+
+                      critDamagePercent:
+                        0,
+
+                      resistanceMultiplier:
+                        enemyModifiers
+                          .resistanceMultiplier,
+                    }) *
+                    hitCount;
+
+                  const lunarCrit =
+                    calculateLunarDirectDamage({
+                      reaction:
+                        lunarReactionId,
+
+                      referenceValue:
+                        lunarReferenceValue,
+
+                      multiplier,
+
+                      elementalMastery:
+                        stats.emFinal,
+
+                      lunarReactionBonusPercent,
+
+                      critDamagePercent:
+                        stats
+                          .critDamageFinal,
+
+                      resistanceMultiplier:
+                        enemyModifiers
+                          .resistanceMultiplier,
+                    }) *
+                    hitCount;
+
+                  const lunarExpected =
+                    lunarNonCrit *
+                      (
+                        1 -
+                        critProbability
+                      ) +
+                    lunarCrit *
+                      critProbability;
+
+                  rows.push({
+                    id:
+                      `${skillIndex}-${entryIndex}-${lunarReactionId}`,
+
+                    label:
+                      entry.label,
+
+                    expected:
+                      lunarExpected,
+
+                    crit:
+                      lunarCrit,
+
+                    nonCrit:
+                      lunarNonCrit,
+
+                    reaction: true,
+                    reactionSource:
+                      "native",
+                  });
+
+                  return;
+                }
+
+                /*
+                 * 通常の直撃ダメージ
+                 */
                 const attackTypeBonus =
                   getAttackTypeBonus(
                     skillIndex,
@@ -2657,10 +3099,6 @@ export default function Home() {
                         .resistanceMultiplier,
                   });
 
-                const hitCount =
-                  entry.hitCount ??
-                  1;
-
                 const nonCrit =
                   nonCritPerHit *
                   hitCount *
@@ -2693,17 +3131,15 @@ export default function Home() {
                 });
 
                 /*
-                 * 星反応
+                 * 手動の「星反応を表示」は、
+                 * 通常攻撃項目に対する比較用の追加表示として残す。
                  */
-
                 if (
                   useStarReaction
                 ) {
                   const reactionBonus =
-                    (
-                      stats
-                        .reactionDamageFinal
-                    ) /
+                    stats
+                      .reactionDamageFinal /
                     100;
 
                   const starNonCrit =
@@ -2794,6 +3230,8 @@ export default function Home() {
                       starNonCrit,
 
                     reaction: true,
+                    reactionSource:
+                      "manual",
                   });
                 }
               }
@@ -2979,6 +3417,389 @@ export default function Home() {
       0
     ) !== 0 ||
     addReactionDamage !== 0;
+
+
+  /* =========================
+   * 固有天賦・命ノ星座などの追加ダメージ
+   * ========================= */
+
+  const specialDamageGroups =
+    useMemo<DamageGroup[]>(() => {
+      if (
+        !character ||
+        !stats
+      ) {
+        return [];
+      }
+
+      const entries =
+        extractSpecialDamageEntries(
+          character
+        );
+
+      if (
+        entries.length ===
+        0
+      ) {
+        return [];
+      }
+
+      const critProbability =
+        Math.max(
+          0,
+          Math.min(
+            1,
+            stats
+              .critRateFinal /
+              100
+          )
+        );
+
+      const grouped =
+        new Map<
+          string,
+          DamageGroup
+        >();
+
+      entries.forEach(
+        (
+          entry,
+          index
+        ) => {
+          const nonCrit =
+            calculateSpecialDamage({
+              entry,
+              attack:
+                stats.atkFinal,
+              hp:
+                stats.hpFinal,
+              defense:
+                stats.defFinal,
+              elementalMastery:
+                stats.emFinal,
+              critDamage:
+                0,
+              elementDamageBonus:
+                stats
+                  .elementDamageFinal,
+              genericDamageBonus:
+                stats
+                  .genericDamageFinal,
+              lunarChargedBonus:
+                stats
+                  .lunarChargedDamageFinal,
+              lunarBloomBonus:
+                stats
+                  .lunarBloomDamageFinal,
+              lunarCrystallizeBonus:
+                stats
+                  .lunarCrystallizeDamageFinal,
+              defenseMultiplier:
+                enemyModifiers
+                  .defenseMultiplier,
+              resistanceMultiplier:
+                enemyModifiers
+                  .resistanceMultiplier,
+            });
+
+          const crit =
+            calculateSpecialDamage({
+              entry,
+              attack:
+                stats.atkFinal,
+              hp:
+                stats.hpFinal,
+              defense:
+                stats.defFinal,
+              elementalMastery:
+                stats.emFinal,
+              critDamage:
+                stats
+                  .critDamageFinal,
+              elementDamageBonus:
+                stats
+                  .elementDamageFinal,
+              genericDamageBonus:
+                stats
+                  .genericDamageFinal,
+              lunarChargedBonus:
+                stats
+                  .lunarChargedDamageFinal,
+              lunarBloomBonus:
+                stats
+                  .lunarBloomDamageFinal,
+              lunarCrystallizeBonus:
+                stats
+                  .lunarCrystallizeDamageFinal,
+              defenseMultiplier:
+                enemyModifiers
+                  .defenseMultiplier,
+              resistanceMultiplier:
+                enemyModifiers
+                  .resistanceMultiplier,
+            });
+
+          const expected =
+            nonCrit *
+              (
+                1 -
+                critProbability
+              ) +
+            crit *
+              critProbability;
+
+          const groupKey =
+            `${entry.sourceType}:${entry.sourceName}`;
+
+          let group =
+            grouped.get(
+              groupKey
+            );
+
+          if (!group) {
+            group = {
+              id:
+                `special-${groupKey}`,
+              name:
+                entry.sourceType ===
+                "passive"
+                  ? `固有天賦：${entry.sourceName}`
+                  : entry.sourceType ===
+                    "constellation"
+                  ? `命ノ星座：${entry.sourceName}`
+                  : entry.sourceName,
+              rows: [],
+            };
+
+            grouped.set(
+              groupKey,
+              group
+            );
+          }
+
+          group.rows.push({
+            id:
+              `special-${index}-${entry.id}`,
+            label:
+              entry.label,
+            expected,
+            crit,
+            nonCrit,
+            reaction:
+              entry.damageType !==
+              "direct",
+            reactionSource:
+              entry.damageType !==
+              "direct"
+                ? "native"
+                : undefined,
+          });
+        }
+      );
+
+      return [
+        ...grouped.values(),
+      ];
+    }, [
+      character,
+      stats,
+      enemyModifiers,
+    ]);
+
+  /* =========================
+   * ダメージ表示タブ
+   * ========================= */
+
+  const damageGroupsForActiveTab =
+    useMemo<DamageGroup[]>(() => {
+      const filterRows = (
+        group: DamageGroup,
+        predicate: (
+          row: DamageRowData
+        ) => boolean
+      ) => {
+        const rows =
+          group.rows.filter(
+            predicate
+          );
+
+        if (
+          rows.length ===
+          0
+        ) {
+          return null;
+        }
+
+        return {
+          ...group,
+          rows,
+        };
+      };
+
+      if (
+        activeDamageTab ===
+        "reaction"
+      ) {
+        return damageGroupsWithComparison
+          .map(
+            (group) =>
+              filterRows(
+                group,
+                (row) =>
+                  row.reactionSource ===
+                  "native"
+              )
+          )
+          .filter(
+            (
+              group
+            ): group is DamageGroup =>
+              group !== null
+          );
+      }
+
+      if (
+        activeDamageTab ===
+        "other"
+      ) {
+        return specialDamageGroups;
+      }
+
+      const targetSkillIndex =
+        activeDamageTab ===
+        "normal"
+          ? 0
+          : activeDamageTab ===
+            "skill"
+          ? 1
+          : 2;
+
+      const targetGroup =
+        damageGroupsWithComparison[
+          targetSkillIndex
+        ];
+
+      /*
+       * skill.id順ではなくcharacter.skills順で
+       * damageGroupsを作っているため、通常はこの位置に来る。
+       * rowsが空でfilter済みの場合に備えてnameでも補助検索する。
+       */
+      const sourceGroups =
+        damageGroupsWithComparison.filter(
+          (group) => {
+            const skill =
+              character?.skills[
+                targetSkillIndex
+              ];
+
+            return (
+              group.id ===
+                String(
+                  skill?.id ?? ""
+                )
+            );
+          }
+        );
+
+      const groups =
+        sourceGroups.length
+          ? sourceGroups
+          : targetGroup
+          ? [targetGroup]
+          : [];
+
+      if (
+        activeDamageTab !==
+        "normal"
+      ) {
+        return groups
+          .map(
+            (group) =>
+              filterRows(
+                group,
+                (row) =>
+                  !row.reaction
+              )
+          )
+          .filter(
+            (
+              group
+            ): group is DamageGroup =>
+              group !== null
+          );
+      }
+
+      return groups
+        .map(
+          (group) =>
+            filterRows(
+              group,
+              (row) => {
+                if (
+                  row.reaction
+                ) {
+                  return false;
+                }
+
+                const label =
+                  row.label;
+
+                if (
+                  activeNormalDamageSubTab ===
+                  "charged"
+                ) {
+                  return label.includes(
+                    "重撃"
+                  );
+                }
+
+                if (
+                  activeNormalDamageSubTab ===
+                  "plunge"
+                ) {
+                  return (
+                    label.includes(
+                      "落下"
+                    ) ||
+                    label.includes(
+                      "低空"
+                    ) ||
+                    label.includes(
+                      "高空"
+                    )
+                  );
+                }
+
+                return (
+                  !label.includes(
+                    "重撃"
+                  ) &&
+                  !label.includes(
+                    "落下"
+                  ) &&
+                  !label.includes(
+                    "低空"
+                  ) &&
+                  !label.includes(
+                    "高空"
+                  )
+                );
+              }
+            )
+        )
+        .filter(
+          (
+            group
+          ): group is DamageGroup =>
+            group !== null
+        );
+    }, [
+      activeDamageTab,
+      activeNormalDamageSubTab,
+      damageGroupsWithComparison,
+      character,
+      specialDamageGroups,
+    ]);
 
   /* =========================
    * UI
@@ -3524,6 +4345,75 @@ export default function Home() {
                       />
                     )}
 
+
+                    <StatRow
+                      label="月反応ダメージ"
+                      noBuff={`${stats.lunarReactionDamageNoBuff.toFixed(
+                        1
+                      )}%`}
+                      buffed={`${stats.lunarReactionDamageFinal.toFixed(
+                        1
+                      )}%`}
+                      additional={
+                        addLunarReactionDamage
+                      }
+                      setAdditional={
+                        setAddLunarReactionDamage
+                      }
+                      unit="%"
+                    />
+
+                    <StatRow
+                      label="月感電ダメージ"
+                      noBuff={`${stats.lunarChargedDamageNoBuff.toFixed(
+                        1
+                      )}%`}
+                      buffed={`${stats.lunarChargedDamageFinal.toFixed(
+                        1
+                      )}%`}
+                      additional={
+                        addLunarChargedDamage
+                      }
+                      setAdditional={
+                        setAddLunarChargedDamage
+                      }
+                      unit="%"
+                    />
+
+                    <StatRow
+                      label="月開花ダメージ"
+                      noBuff={`${stats.lunarBloomDamageNoBuff.toFixed(
+                        1
+                      )}%`}
+                      buffed={`${stats.lunarBloomDamageFinal.toFixed(
+                        1
+                      )}%`}
+                      additional={
+                        addLunarBloomDamage
+                      }
+                      setAdditional={
+                        setAddLunarBloomDamage
+                      }
+                      unit="%"
+                    />
+
+                    <StatRow
+                      label="月結晶ダメージ"
+                      noBuff={`${stats.lunarCrystallizeDamageNoBuff.toFixed(
+                        1
+                      )}%`}
+                      buffed={`${stats.lunarCrystallizeDamageFinal.toFixed(
+                        1
+                      )}%`}
+                      additional={
+                        addLunarCrystallizeDamage
+                      }
+                      setAdditional={
+                        setAddLunarCrystallizeDamage
+                      }
+                      unit="%"
+                    />
+
                     {/* 必要な行を追加 */}
                     <details className="mt-2 border border-gray-800">
                       <summary className="cursor-pointer px-3 py-2 text-xs text-gray-400">
@@ -4042,20 +4932,135 @@ export default function Home() {
                       )}
                     </div>
 
-                    <div className="max-h-[calc(100vh-150px)] overflow-auto">
-                      {damageGroupsWithComparison.map(
-                        (
-                          group
-                        ) => (
-                          <DamageGroupTable
-                            key={
-                              group.id
-                            }
-                            group={
-                              group
-                            }
-                          />
+                    <div className="border-b border-gray-700 bg-[#161a21] p-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(
+                          [
+                            [
+                              "normal",
+                              "通常",
+                            ],
+                            [
+                              "skill",
+                              "スキル",
+                            ],
+                            [
+                              "burst",
+                              "爆発",
+                            ],
+                            [
+                              "reaction",
+                              "反応",
+                            ],
+                            [
+                              "other",
+                              "その他",
+                            ],
+                          ] as const
+                        ).map(
+                          ([
+                            id,
+                            label,
+                          ]) => (
+                            <button
+                              key={
+                                id
+                              }
+                              type="button"
+                              onClick={() =>
+                                setActiveDamageTab(
+                                  id
+                                )
+                              }
+                              className={`border px-4 py-2 text-sm font-bold ${
+                                activeDamageTab ===
+                                id
+                                  ? "border-cyan-400 bg-cyan-950/40 text-cyan-200"
+                                  : "border-gray-700 bg-[#11141a] text-gray-400 hover:bg-[#1b2029]"
+                              }`}
+                            >
+                              {
+                                label
+                              }
+                            </button>
+                          )
+                        )}
+                      </div>
+
+                      {activeDamageTab ===
+                        "normal" && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {(
+                            [
+                              [
+                                "normal",
+                                "通常攻撃",
+                              ],
+                              [
+                                "charged",
+                                "重撃",
+                              ],
+                              [
+                                "plunge",
+                                "落下攻撃",
+                              ],
+                            ] as const
+                          ).map(
+                            ([
+                              id,
+                              label,
+                            ]) => (
+                              <button
+                                key={
+                                  id
+                                }
+                                type="button"
+                                onClick={() =>
+                                  setActiveNormalDamageSubTab(
+                                    id
+                                  )
+                                }
+                                className={`border-b-2 px-3 py-1.5 text-xs font-bold ${
+                                  activeNormalDamageSubTab ===
+                                  id
+                                    ? "border-cyan-400 text-cyan-200"
+                                    : "border-transparent text-gray-500 hover:text-gray-300"
+                                }`}
+                              >
+                                {
+                                  label
+                                }
+                              </button>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="max-h-[calc(100vh-220px)] overflow-auto">
+                      {damageGroupsForActiveTab.length >
+                      0 ? (
+                        damageGroupsForActiveTab.map(
+                          (
+                            group
+                          ) => (
+                            <DamageGroupTable
+                              key={
+                                group.id
+                              }
+                              group={
+                                group
+                              }
+                            />
+                          )
                         )
+                      ) : (
+                        <div className="px-4 py-8 text-center text-sm text-gray-500">
+                          {activeDamageTab ===
+                          "other"
+                            ? "自動抽出できる固有天賦・命ノ星座の追加ダメージはありません"
+                            : "この項目に表示できるダメージはありません"}
+                        </div>
                       )}
                     </div>
                   </div>
